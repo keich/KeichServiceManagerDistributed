@@ -1,6 +1,5 @@
 package ru.keich.mon.servicemanager.item;
 
-import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.HashSet;
 import java.util.List;
@@ -75,7 +74,6 @@ public class ItemService extends EntityService<String, Item> {
 		lock(itemId, () -> item, old -> {
 			item.setStatus(old.getStatus());
 			item.setCreatedOn(old.getCreatedOn());
-			item.setUpdatedOn(Instant.now());
 			item.setItemToEvent(old.getItemToEvent());
 			return item;
 		});

@@ -1,5 +1,6 @@
 package ru.keich.mon.servicemanager.item;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -59,6 +60,15 @@ public class ItemController extends EntityController<String, Item> {
 	@PostMapping("/item")
 	@Override
 	public ResponseEntity<String> addOrUpdate(@RequestBody List<Item> items) {
+		var dateTime = LocalDateTime.now();
+		items.forEach(item -> {
+			if (Objects.isNull(item.getCreatedOn())) {
+				item.setCreatedOn(dateTime);
+			}
+			if (Objects.isNull(item.getUpdatedOn())) {
+				item.setUpdatedOn(dateTime);
+			}
+		});
 		return super.addOrUpdate(items);
 	}
 

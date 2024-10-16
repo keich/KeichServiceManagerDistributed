@@ -1,6 +1,6 @@
 package ru.keich.mon.servicemanager.item;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -45,9 +45,9 @@ public class Item {
 
 	private final String sourceKey;
 
-	private Instant createdOn = Instant.now();
+	private LocalDateTime createdOn;
 
-	private Instant updatedOn = Instant.now();
+	private LocalDateTime updatedOn;
 
 	private Map<String, String> fields = Collections.emptyMap();
 

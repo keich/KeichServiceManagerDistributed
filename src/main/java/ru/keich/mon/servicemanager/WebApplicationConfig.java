@@ -1,7 +1,5 @@
 package ru.keich.mon.servicemanager;
 
-import java.io.FileNotFoundException;
-
 import org.springframework.boot.web.server.ErrorPage;
 import org.springframework.boot.web.server.WebServerFactoryCustomizer;
 import org.springframework.boot.web.servlet.server.ConfigurableServletWebServerFactory;
@@ -12,11 +10,6 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-
-import com.hazelcast.config.ClasspathYamlConfig;
-import com.hazelcast.config.Config;
-import com.hazelcast.core.Hazelcast;
-import com.hazelcast.core.HazelcastInstance;
 
 import lombok.extern.java.Log;
 
@@ -60,13 +53,6 @@ public class WebApplicationConfig implements WebMvcConfigurer {
 		}).permitAll());
 		http.csrf(csrf -> csrf.disable());
 		return http.build();
-	}
-
-	@Bean
-	public HazelcastInstance hazelcastInstanceConfig() throws FileNotFoundException {
-		Config config = new ClasspathYamlConfig("hazelcast.yaml");
-		config.getSerializationConfig().getCompactSerializationConfig().addSerializer(new InstantSerializer());
-		return Hazelcast.newHazelcastInstance(config);
 	}
 	
 }

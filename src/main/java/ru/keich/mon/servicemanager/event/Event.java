@@ -1,6 +1,6 @@
 package ru.keich.mon.servicemanager.event;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Map;
 
@@ -47,9 +47,9 @@ public class Event {
 	
 	private final BaseStatus status;
 
-	private Instant createdOn = Instant.now();
+	private LocalDateTime createdOn = LocalDateTime.now();
 	
-	private Instant updatedOn = Instant.now();
+	private LocalDateTime updatedOn = LocalDateTime.now();
 	
 	private Map<String, String> fields = Collections.emptyMap();
 	

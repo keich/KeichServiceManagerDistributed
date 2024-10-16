@@ -1,7 +1,9 @@
 package ru.keich.mon.servicemanager.event;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -46,6 +48,15 @@ public class EventController extends EntityController<String, Event> {
 	@Override
 	@PostMapping("/event")
 	public ResponseEntity<String> addOrUpdate(@RequestBody List<Event> events) {
+		var dateTime = LocalDateTime.now();
+		events.forEach(event -> {
+			if (Objects.isNull(event.getCreatedOn())) {
+				event.setCreatedOn(dateTime);
+			}
+			if (Objects.isNull(event.getUpdatedOn())) {
+				event.setUpdatedOn(dateTime);
+			}
+		});
 		return super.addOrUpdate(events);
 	}
 	

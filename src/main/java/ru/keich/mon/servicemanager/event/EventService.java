@@ -1,5 +1,14 @@
 package ru.keich.mon.servicemanager.event;
 
+import java.time.LocalDateTime;
+
+import org.springframework.stereotype.Service;
+
+import com.hazelcast.collection.IQueue;
+import com.hazelcast.core.HazelcastInstance;
+
+import ru.keich.mon.servicemanager.entity.EntityService;
+
 /*
  * Copyright 2024 the original author or authors.
  *
@@ -15,15 +24,6 @@ package ru.keich.mon.servicemanager.event;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-import java.time.Instant;
-
-import org.springframework.stereotype.Service;
-
-import com.hazelcast.collection.IQueue;
-import com.hazelcast.core.HazelcastInstance;
-
-import ru.keich.mon.servicemanager.entity.EntityService;
 
 @Service
 public class EventService extends EntityService<String, Event>{
@@ -45,7 +45,7 @@ public class EventService extends EntityService<String, Event>{
 		var eventId = event.getId();
 		lock(eventId, () -> event, old -> {
 			event.setCreatedOn(old.getCreatedOn());
-			event.setUpdatedOn(Instant.now());
+			event.setUpdatedOn(LocalDateTime.now());
 			return event;
 		});
 		queueEventChange.add(event.getId());
