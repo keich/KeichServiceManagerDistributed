@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ForkJoinPool;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -56,6 +57,7 @@ public class ItemService extends EntityService<String, Item> {
 	protected final IQueue<String> queueEventRemoved;
 	protected final IQueue<String> queueItemChange;
 	private final EventService eventService;
+	ForkJoinPool forkJoinPool = ForkJoinPool.commonPool();
 	
 	public ItemService(HazelcastInstance hazelcastInstance, EventService eventService) {
 		super(NAME_ITEMS_MAP, hazelcastInstance);
@@ -172,30 +174,35 @@ public class ItemService extends EntityService<String, Item> {
 	}
 	
 	private void eventChanged(ItemEvent<String> info) {
-		var opt = Optional.ofNullable(queueEventChange.poll()).map(eventService::findById);
+		var opt = Optional.ofNullable(queueEventChange.poll());
 		while (opt.isPresent()) {
-			final var event = opt.get();
-			findFiltersByEqualFields(event.getFields()).forEach(itft -> {
-				addEventToItem(event, itft.getKey().getId(), itft.getValue());
+			var task = new SimpleTask<String>(opt.get(), (eventId) -> {
+				var event = eventService.findById(eventId);
+				findFiltersByEqualFields(event.getFields()).forEach(itft -> {
+					addEventToItem(event, itft.getKey().getId(), itft.getValue());
+				});
 			});
-			opt = Optional.ofNullable(queueEventChange.poll()).map(eventService::findById);
+			forkJoinPool.execute(task);
+			opt = Optional.ofNullable(queueEventChange.poll());
 		}
 	}
 	
 	private void eventRemoved(ItemEvent<String> info) {
 		var opt = Optional.ofNullable(queueEventRemoved.poll());
 		while (opt.isPresent()) {
-			final var eventId = opt.get();
-			var ie = new ItemToEvent(eventId, BaseStatus.CLEAR);
-			findItemIdsByEventId(opt.get()).stream()
-					.forEach(itemId -> {
-						lock(itemId, item -> {
-							if(item.getItemToEvent().remove(ie)) {
-								return Optional.of(item);
-							} 
-							return Optional.empty();
-						}, queueItemChange::add);
-					});
+			var task = new SimpleTask<String>(opt.get(), (eventId) -> {
+				var ie = new ItemToEvent(eventId, BaseStatus.CLEAR);
+				findItemIdsByEventId(eventId).stream()
+						.forEach(itemId -> {
+							lock(itemId, item -> {
+								if(item.getItemToEvent().remove(ie)) {
+									return Optional.of(item);
+								} 
+								return Optional.empty();
+							}, queueItemChange::add);
+						});
+			});
+			forkJoinPool.execute(task);
 			opt = Optional.ofNullable(queueEventRemoved.poll());
 		}
 	}
@@ -207,7 +214,10 @@ public class ItemService extends EntityService<String, Item> {
 	private void itemChanged(ItemEvent<String> info) {
 		var opt = Optional.ofNullable(queueItemChange.poll());
 		while (opt.isPresent()) {
-			lock(opt.get(), this::calculateStatus, this::pushParentsForUpdate);
+			var task = new SimpleTask<String>(opt.get(), (itemId) -> {
+				lock(itemId, this::calculateStatus, this::pushParentsForUpdate);
+			});
+			forkJoinPool.execute(task);
 			opt = Optional.ofNullable(queueItemChange.poll());
 		}
 	}
