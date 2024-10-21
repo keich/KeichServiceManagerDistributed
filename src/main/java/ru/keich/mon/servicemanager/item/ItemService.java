@@ -176,13 +176,10 @@ public class ItemService extends EntityService<String, Item> {
 	private void eventChanged(ItemEvent<String> info) {
 		var opt = Optional.ofNullable(queueEventChange.poll());
 		while (opt.isPresent()) {
-			var task = new SimpleTask<String>(opt.get(), (eventId) -> {
-				var event = eventService.findById(eventId);
-				findFiltersByEqualFields(event.getFields()).forEach(itft -> {
-					addEventToItem(event, itft.getKey().getId(), itft.getValue());
-				});
+			var event = eventService.findById(opt.get());
+			findFiltersByEqualFields(event.getFields()).forEach(itft -> {
+				addEventToItem(event, itft.getKey().getId(), itft.getValue());
 			});
-			forkJoinPool.execute(task);
 			opt = Optional.ofNullable(queueEventChange.poll());
 		}
 	}
@@ -190,19 +187,18 @@ public class ItemService extends EntityService<String, Item> {
 	private void eventRemoved(ItemEvent<String> info) {
 		var opt = Optional.ofNullable(queueEventRemoved.poll());
 		while (opt.isPresent()) {
-			var task = new SimpleTask<String>(opt.get(), (eventId) -> {
-				var ie = new ItemToEvent(eventId, BaseStatus.CLEAR);
-				findItemIdsByEventId(eventId).stream()
-						.forEach(itemId -> {
-							lock(itemId, item -> {
-								if(item.getItemToEvent().remove(ie)) {
-									return Optional.of(item);
-								} 
-								return Optional.empty();
-							}, queueItemChange::add);
-						});
-			});
-			forkJoinPool.execute(task);
+			var eventId = opt.get();
+			var ie = new ItemToEvent(eventId, BaseStatus.CLEAR);
+			findItemIdsByEventId(eventId).stream()
+					.forEach(itemId -> {
+						lock(itemId, item -> {
+							if(item.getItemToEvent().remove(ie)) {
+								return Optional.of(item);
+							} 
+							return Optional.empty();
+						}, queueItemChange::add);
+					});
+
 			opt = Optional.ofNullable(queueEventRemoved.poll());
 		}
 	}
@@ -214,10 +210,7 @@ public class ItemService extends EntityService<String, Item> {
 	private void itemChanged(ItemEvent<String> info) {
 		var opt = Optional.ofNullable(queueItemChange.poll());
 		while (opt.isPresent()) {
-			var task = new SimpleTask<String>(opt.get(), (itemId) -> {
-				lock(itemId, this::calculateStatus, this::pushParentsForUpdate);
-			});
-			forkJoinPool.execute(task);
+			lock(opt.get(), this::calculateStatus, this::pushParentsForUpdate);
 			opt = Optional.ofNullable(queueItemChange.poll());
 		}
 	}
