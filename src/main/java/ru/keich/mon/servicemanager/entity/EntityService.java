@@ -51,7 +51,7 @@ public abstract class EntityService<K, T> {
 		try {
 			var entity = Optional.ofNullable(map.get(entityId))
 					.map(update::apply)
-					.orElse(insert.get());
+					.orElseGet(insert);
 			map.set(entityId, entity);
 		} finally {
 			map.unlock(entityId);
