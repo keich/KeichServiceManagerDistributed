@@ -1,6 +1,8 @@
 package ru.keich.mon.servicemanager.item;
 
 import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -18,7 +20,9 @@ import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.query.Predicate;
 import com.hazelcast.query.Predicates;
 
+import lombok.Getter;
 import ru.keich.mon.servicemanager.BaseStatus;
+import ru.keich.mon.servicemanager.BaseStatus.BaseStatusComparator;
 import ru.keich.mon.servicemanager.QueueListner;
 import ru.keich.mon.servicemanager.StringKeyValue;
 import ru.keich.mon.servicemanager.entity.EntityService;
@@ -92,7 +96,24 @@ public class ItemService extends EntityService<String, Item> {
 		return Predicates.equal(field, k);
 	}
 
-	private List<Map.Entry<Item, ItemFilter>> findFiltersByEqualFields(Map<String, String> fields) {
+	@Getter
+	static class EventItemFilter {
+
+		Event event;
+		Item item;
+		ItemFilter filter;
+
+		public EventItemFilter(Event event, Item item, ItemFilter filter) {
+			super();
+			this.event = event;
+			this.item = item;
+			this.filter = filter;
+		}
+
+	}
+	
+	private List<EventItemFilter> findFiltersByEqualFields(Event event) {
+		var fields = event.getFields();
 		return fields.entrySet()
 				.stream()
 				.map(StringKeyValue::new)
@@ -105,7 +126,7 @@ public class ItemService extends EntityService<String, Item> {
 							.stream()
 							.filter(flt -> fields.entrySet().containsAll(flt.getValue().getEqualFields().entrySet()))
 							.findFirst()
-							.map(e -> Map.entry(item, e.getValue()));
+							.map(e -> new EventItemFilter(event, item, e.getValue()));
 				})
 				.filter(Optional::isPresent)
 				.map(Optional::get)
@@ -157,13 +178,11 @@ public class ItemService extends EntityService<String, Item> {
 		return map.keySet(p).stream().collect(Collectors.toSet());
 	}
 	
-	private void addEventToItem(Event event, String itemId, ItemFilter filter) {
-		final BaseStatus status;
-		if (filter.isUsingResultStatus()) {
-			status = filter.getResultStatus();
-		} else {
-			status = event.getStatus();
-		}
+	private void addEventToItem(EventItemFilter eventItemFilter) {
+		var filter = eventItemFilter.getFilter();
+		var event = eventItemFilter.getEvent();
+		var itemId = eventItemFilter.getItem().getId();
+		var status = filter.isUsingResultStatus() ? filter.getResultStatus() : event.getStatus();
 		lock(itemId, item -> {
 			var rel = new ItemToEvent(event.getId(), status);
 			item.getItemToEvent().remove(rel);
@@ -174,13 +193,10 @@ public class ItemService extends EntityService<String, Item> {
 	}
 	
 	private void eventChanged(ItemEvent<String> info) {
-		var opt = Optional.ofNullable(queueEventChange.poll());
+		var opt = Optional.ofNullable(queueEventChange.poll()).map(eventService::findById);
 		while (opt.isPresent()) {
-			var event = eventService.findById(opt.get());
-			findFiltersByEqualFields(event.getFields()).forEach(itft -> {
-				addEventToItem(event, itft.getKey().getId(), itft.getValue());
-			});
-			opt = Optional.ofNullable(queueEventChange.poll());
+			opt.map(this::findFiltersByEqualFields).orElse(Collections.emptyList()).forEach(this::addEventToItem);
+			opt = Optional.ofNullable(queueEventChange.poll()).map(eventService::findById);
 		}
 	}
 	
@@ -192,10 +208,7 @@ public class ItemService extends EntityService<String, Item> {
 			findItemIdsByEventId(eventId).stream()
 					.forEach(itemId -> {
 						lock(itemId, item -> {
-							if(item.getItemToEvent().remove(ie)) {
-								return Optional.of(item);
-							} 
-							return Optional.empty();
+							return Optional.of(item.getItemToEvent().remove(ie)).filter(ret -> ret).map(b -> item);
 						}, queueItemChange::add);
 					});
 
