@@ -2,11 +2,9 @@ package ru.keich.mon.servicemanager.item;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonFilter;
@@ -57,13 +55,13 @@ public class Item {
 
 	private Map<String, ItemFilter> filters = Collections.emptyMap();
 
-	private Set<String> childrenIds = Collections.emptySet();
+	private String[] childrenIds = new String[0];
 	
 	transient
-	private List<Item> children = Collections.emptyList();
+	private Item[] children;
 	
 	transient
-	private List<Item> parents = Collections.emptyList();
+	private Item[] parents;
 
 	@JsonProperty(access = JsonProperty.Access.READ_ONLY)
 	private boolean hasChildren = false;
@@ -74,7 +72,7 @@ public class Item {
 	private Set<ItemToEvent> itemToEvent = Collections.emptySet();
 
 	@JsonIgnore
-	private Set<StringKeyValue> allFiltersEqualFields = Collections.emptySet();
+	private StringKeyValue[] allFiltersEqualFields;
 
 	@JsonCreator
 	public Item(
@@ -85,27 +83,6 @@ public class Item {
 		this.id = id;
 		this.source = source;
 		this.sourceKey = sourceKey;
-	}
-	
-	public void setChildrenIds(Set<String> childrenIds) {
-		this.childrenIds = childrenIds;
-		if(childrenIds.size() > 0) {
-			this.hasChildren = true;
-		} else {
-			this.hasChildren = false;
-		}
-	}
-
-	public void setAllFiltersEqualFields(Set<StringKeyValue> allFiltersEqualFields) {
-		throw new RuntimeException("setAllFiltersEqualFields");
-	}
-	
-	public void setFilters(Map<String, ItemFilter> filters) {
-		this.filters = filters;
-		allFiltersEqualFields = filters.entrySet().stream()
-		.flatMap(e -> e.getValue().getEqualFields().entrySet().stream())
-		.map(StringKeyValue::new)
-		.collect(Collectors.toSet());
 	}
 
 	@Override

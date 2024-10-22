@@ -137,9 +137,9 @@ public class ItemService extends EntityService<String, Item> {
 					.map(ItemToEvent::getEventId)
 					.toList();
 			out.addAll(eventIds);
-			item.getChildrenIds().forEach(childId -> {
+			for(var childId: item.getChildrenIds()) {
 				queue.add(childId);
-			});
+			};
 		}
 		return out;
 	}
@@ -216,13 +216,13 @@ public class ItemService extends EntityService<String, Item> {
 	}
 
 	private int calculateEntityStatusAsCluster(Item item, ItemRule rule) {
-		final var overal = item.getChildrenIds().size();
+		final var overal = item.getChildrenIds().length;
 		if (overal <= 0) {
 			return 0;
 		}
-		var listStatus = item.getChildrenIds().stream()
-				.map(map::get)
-				.filter(Objects::nonNull)
+		this.findByIds(item.getChildrenIds());
+		var listStatus = findByIds(item.getChildrenIds()).entrySet().stream()
+				.map(Map.Entry::getValue)
 				.mapToInt(child -> child.getStatus().ordinal())
 				.boxed()
 				.filter(i -> i >= rule.getStatusThreshold().ordinal())
@@ -239,9 +239,8 @@ public class ItemService extends EntityService<String, Item> {
 	}
 
 	private int calculateEntityStatusDefault(Item item) {
-		return item.getChildrenIds().stream()
-				.map(map::get)
-				.filter(Objects::nonNull)
+		return findByIds(item.getChildrenIds()).entrySet().stream()
+				.map(Map.Entry::getValue)
 				.mapToInt(child -> child.getStatus().ordinal())
 				.max().orElse(0);
 	}

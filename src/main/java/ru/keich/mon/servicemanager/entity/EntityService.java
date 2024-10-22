@@ -1,5 +1,7 @@
 package ru.keich.mon.servicemanager.entity;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -97,6 +99,10 @@ public abstract class EntityService<K, T> {
 
 	public Map<K, T> findByIds(Set<K> keys) {
 		return map.getAll(keys);
+	}
+	
+	public Map<K, T> findByIds(K[] keys) {
+		return map.getAll(new HashSet<K>(Arrays.asList(keys)));
 	}
 
 	public Optional<T> deleteById(K entityId) {

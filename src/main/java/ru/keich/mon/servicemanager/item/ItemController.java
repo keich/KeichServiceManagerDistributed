@@ -1,7 +1,7 @@
 package ru.keich.mon.servicemanager.item;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import lombok.extern.java.Log;
+import ru.keich.mon.servicemanager.StringKeyValue;
 import ru.keich.mon.servicemanager.entity.EntityController;
 
 /*
@@ -68,6 +69,14 @@ public class ItemController extends EntityController<String, Item> {
 			if (Objects.isNull(item.getUpdatedOn())) {
 				item.setUpdatedOn(dateTime);
 			}
+			var allFiltersEqualFields = item.getFilters().entrySet().stream()
+					.flatMap(e -> e.getValue().getEqualFields().entrySet().stream())
+					.map(StringKeyValue::new)
+					.toArray(StringKeyValue[] ::new);
+			item.setAllFiltersEqualFields(allFiltersEqualFields);
+			if(item.getChildrenIds().length > 0) {
+				item.setHasChildren(true);
+			}
 		});
 		return super.addOrUpdate(items);
 	}
@@ -91,9 +100,9 @@ public class ItemController extends EntityController<String, Item> {
 	@CrossOrigin(origins = "*")
 	public ResponseEntity<MappingJacksonValue> findChildrenById(@PathVariable String id
 			,@RequestParam MultiValueMap<String, String> reqParam) {
-		var children = Optional.ofNullable(itemService.findById(id))
+		var children = Arrays.asList(Optional.ofNullable(itemService.findById(id))
 				.map(Item::getChildrenIds)
-				.orElse(Collections.emptySet())
+				.orElse(new String[0]))
 				.stream()
 				.map(itemService::findById)
 				.filter(Objects::nonNull)
@@ -146,15 +155,15 @@ public class ItemController extends EntityController<String, Item> {
 				.entrySet()
 				.stream()
 				.map(Map.Entry::getValue)
-				.toList();
+				.toArray(Item[]::new);
 		history.add(parent.getId());
-		children.forEach(child -> {
+		for(var child: children) {
 			if (history.contains(child.getId())) {
 				log.warning("setChildren: circle found from " + parent.getId() + " to " + child.getId());
 			} else {
 				setChildren(child, history);
 			}
-		});
+		}
 		parent.setChildren(children);
 		history.remove(parent.getId());
 		return parent;
@@ -177,15 +186,16 @@ public class ItemController extends EntityController<String, Item> {
 		var parents = itemService.findParentIdsById(child.getId()).stream()
 				.map(itemService::findById)
 				.filter(Objects::nonNull)
-				.toList();
+				.toArray(Item[]::new);
+		
 		history.add(child.getId());
-		parents.forEach(parent -> {
+		for(var parent: parents) {
 			if (history.contains(parent.getId())) {
 				log.warning("setParents: circle found from " + parent.getId() + " to " + child.getId());
 			} else {
 				setParents(parent, history);
 			}
-		});
+		}
 		child.setParents(parents);
 		history.remove(child.getId());
 		return child;
