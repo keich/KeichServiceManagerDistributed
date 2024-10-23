@@ -22,7 +22,6 @@ import com.hazelcast.query.Predicates;
 
 import lombok.Getter;
 import ru.keich.mon.servicemanager.BaseStatus;
-import ru.keich.mon.servicemanager.BaseStatus.BaseStatusComparator;
 import ru.keich.mon.servicemanager.QueueListner;
 import ru.keich.mon.servicemanager.StringKeyValue;
 import ru.keich.mon.servicemanager.entity.EntityService;
@@ -175,7 +174,7 @@ public class ItemService extends EntityService<String, Item> {
 	private Set<String> findItemIdsByEventId(String eventId) {
 		var kv = new ItemToEvent(eventId, BaseStatus.CLEAR);
 		var p = getPredicateEqual(INDEX_FIELD_ITEMTOEVENT, kv);
-		return map.keySet(p).stream().collect(Collectors.toSet());
+		return map.keySet(p);
 	}
 	
 	private void addEventToItem(EventItemFilter eventItemFilter) {
