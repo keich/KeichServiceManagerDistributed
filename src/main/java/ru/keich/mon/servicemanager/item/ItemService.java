@@ -229,7 +229,6 @@ public class ItemService extends EntityService<String, Item> {
 		if (overal <= 0) {
 			return 0;
 		}
-		this.findByIds(item.getChildrenIds());
 		var listStatus = findByIds(item.getChildrenIds()).entrySet().stream()
 				.map(Map.Entry::getValue)
 				.mapToInt(child -> child.getStatus().ordinal())
