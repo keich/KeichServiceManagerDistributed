@@ -51,7 +51,7 @@ public class ItemService extends EntityService<String, Item> {
 	
 	public static final String INDEX_FIELD_ALLEQUALFILTERS = "allFiltersEqualFields[any]";
 	public static final String INDEX_FIELD_CHILDREN = "childrenIds[any]";
-	public static final String INDEX_FIELD_ITEMTOEVENT = "itemToEvent[any]";
+	public static final String INDEX_FIELD_ITEMTOEVENT = "events[keys]";
 	
 	public static final String QUEUE_ITEM_CHANGE_NAME = "queueItemChange";
 
@@ -79,7 +79,7 @@ public class ItemService extends EntityService<String, Item> {
 		lock(itemId, () -> item, old -> {
 			item.setStatus(old.getStatus());
 			item.setCreatedOn(old.getCreatedOn());
-			item.setItemToEvent(old.getItemToEvent());
+			item.setEventsStatus(old.getEventsStatus());
 			return item;
 		});
 		queueItemChange.add(item.getId());
@@ -153,9 +153,7 @@ public class ItemService extends EntityService<String, Item> {
 			if(Objects.isNull(item)) {
 				continue;
 			}
-			var eventIds = item.getItemToEvent().stream()
-					.map(ItemToEvent::getEventId)
-					.toList();
+			var eventIds = item.getEventsStatus().keySet();
 			out.addAll(eventIds);
 			for(var childId: item.getChildrenIds()) {
 				queue.add(childId);
@@ -172,8 +170,7 @@ public class ItemService extends EntityService<String, Item> {
 	}
 	
 	private Set<String> findItemIdsByEventId(String eventId) {
-		var kv = new ItemToEvent(eventId, BaseStatus.CLEAR);
-		var p = getPredicateEqual(INDEX_FIELD_ITEMTOEVENT, kv);
+		var p = getPredicateEqual(INDEX_FIELD_ITEMTOEVENT, eventId);
 		return map.keySet(p);
 	}
 	
@@ -183,13 +180,18 @@ public class ItemService extends EntityService<String, Item> {
 		var itemId = eventItemFilter.getItem().getId();
 		var status = filter.isUsingResultStatus() ? filter.getResultStatus() : event.getStatus();
 		lock(itemId, item -> {
-			var rel = new ItemToEvent(event.getId(), status);
-			item.getItemToEvent().remove(rel);
-			item.getItemToEvent().add(rel);
+			item.getEventsStatus().put(event.getId(), status);
 			return Optional.of(item);
 		});
 		queueItemChange.add(itemId);
 	}
+	
+	private void removeEventFromItem(String itemId, String eventId) {
+		lock(itemId, item -> {
+			return Optional.of(item.getEventsStatus().remove(eventId)).map(b -> item);
+		}, queueItemChange::add);
+	}
+	
 	
 	private void eventChanged(ItemEvent<String> info) {
 		var opt = Optional.ofNullable(queueEventChange.poll()).map(eventService::findById);
@@ -203,13 +205,8 @@ public class ItemService extends EntityService<String, Item> {
 		var opt = Optional.ofNullable(queueEventRemoved.poll());
 		while (opt.isPresent()) {
 			var eventId = opt.get();
-			var ie = new ItemToEvent(eventId, BaseStatus.CLEAR);
 			findItemIdsByEventId(eventId).stream()
-					.forEach(itemId -> {
-						lock(itemId, item -> {
-							return Optional.of(item.getItemToEvent().remove(ie)).filter(ret -> ret).map(b -> item);
-						}, queueItemChange::add);
-					});
+					.forEach(itemId -> removeEventFromItem(itemId, eventId));
 
 			opt = Optional.ofNullable(queueEventRemoved.poll());
 		}
@@ -272,8 +269,8 @@ public class ItemService extends EntityService<String, Item> {
 	
 	private Optional<Item> calculateStatus(Item item) {
 		var maxStatus = BaseStatus.fromInteger(calculateStatusByChild(item));
-		var maxEventStatus = item.getItemToEvent().stream()
-				.mapToInt(ie -> ie.getStatus().ordinal())
+		var maxEventStatus = item.getEventsStatus().entrySet().stream()
+				.mapToInt(e -> e.getValue().ordinal())
 				.max()
 				.orElse(0);
 		final var eventStatusMax = BaseStatus.fromInteger(maxEventStatus);

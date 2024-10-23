@@ -69,7 +69,7 @@ public class Item {
 	private String name = "";
 	
 	@JsonIgnore
-	private Set<ItemToEvent> itemToEvent = Collections.emptySet();
+	private ItemEventsStatus eventsStatus = new ItemEventsStatus();
 
 	@JsonIgnore
 	private StringKeyValue[] allFiltersEqualFields;
