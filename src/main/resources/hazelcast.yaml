@@ -334,6 +334,11 @@ hazelcast:
           enabled: false
           device-name: "default-tiered-store-device"
     items:
+      attributes:
+        events:
+          extractor-class-name: ru.keich.mon.servicemanager.item.ItemEntityStatusExtractor  
+        children:
+          extractor-class-name: ru.keich.mon.servicemanager.item.ItemEntityStatusExtractor  
       indexes:
         - type: HASH
           attributes:
@@ -346,7 +351,10 @@ hazelcast:
             - "allFiltersEqualFields[any]"
         - type: HASH
           attributes:
-            - "itemToEvent[any]"
+            - "events[keys]"
+        - type: HASH
+          attributes:
+            - "children[keys]"
     events:
       indexes:
         - type: HASH
@@ -429,7 +437,7 @@ hazelcast:
       #  - BINARY: Data will be stored in serialized binary format. It is the
       #      default option.
       #  - OBJECT: Data will be stored in deserialized form.
-      in-memory-format: OBJECT
+      in-memory-format: BINARY
       # Specifies whether the replicated map is available for reads before the
       # initial replication is completed. Its default value is true. If false,
       # no Exception will be thrown when the replicated map is not yet ready,
