@@ -1,8 +1,6 @@
 package ru.keich.mon.servicemanager.item;
 
 import java.util.ArrayDeque;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -15,16 +13,12 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import com.hazelcast.collection.IQueue;
-import com.hazelcast.collection.ItemEvent;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.query.Predicate;
 import com.hazelcast.query.Predicates;
 
 import lombok.Getter;
-import lombok.extern.java.Log;
 import ru.keich.mon.servicemanager.BaseStatus;
-import ru.keich.mon.servicemanager.QueueListner;
 import ru.keich.mon.servicemanager.QueueThreadReader;
 import ru.keich.mon.servicemanager.StringKeyValue;
 import ru.keich.mon.servicemanager.entity.EntityService;
@@ -48,7 +42,6 @@ import ru.keich.mon.servicemanager.event.EventService;
  */
 
 @Service
-//@Log
 public class ItemService extends EntityService<String, Item> {
 	
 	public static final String NAME_ITEMS_MAP = "items";
@@ -70,7 +63,7 @@ public class ItemService extends EntityService<String, Item> {
 	
 	public ItemService(HazelcastInstance hazelcastInstance,
 			EventService eventService,
-			@Value("${ru.keich.mon.servicemanager.item:2}") Integer queueThredNumber) {
+			@Value("${ru.keich.mon.servicemanager.item.queuethreadnumber:4}") Integer queueThredNumber) {
 		super(NAME_ITEMS_MAP, hazelcastInstance);
 		this.eventService = eventService;
 		queueEventChange = new QueueThreadReader<String>(hazelcastInstance,
@@ -199,8 +192,7 @@ public class ItemService extends EntityService<String, Item> {
 		lock(itemId, item -> {
 			item.getEventsStatus().put(event.getId(), status);
 			return Optional.of(item);
-		});
-		queueItemChange.add(new ParentChild(itemId, ""));
+		}, id -> queueItemChange.add(new ParentChild(id, "")));
 	}
 	
 	private void removeEventFromItem(String itemId, String eventId) {

@@ -336,9 +336,9 @@ hazelcast:
     items:
       attributes:
         events:
-          extractor-class-name: ru.keich.mon.servicemanager.item.ItemEntityStatusExtractor  
+          extractor-class-name: ru.keich.mon.servicemanager.mapstatus.MapStatusExtractor  
         children:
-          extractor-class-name: ru.keich.mon.servicemanager.item.ItemEntityStatusExtractor  
+          extractor-class-name: ru.keich.mon.servicemanager.mapstatus.MapStatusExtractor  
       indexes:
         - type: HASH
           attributes:

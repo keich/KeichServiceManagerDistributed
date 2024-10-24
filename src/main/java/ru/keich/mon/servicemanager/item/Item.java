@@ -4,7 +4,6 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonFilter;
@@ -15,6 +14,7 @@ import lombok.Getter;
 import lombok.Setter;
 import ru.keich.mon.servicemanager.BaseStatus;
 import ru.keich.mon.servicemanager.StringKeyValue;
+import ru.keich.mon.servicemanager.mapstatus.MapStatus;
 
 /*
  * Copyright 2024 the original author or authors.
@@ -69,10 +69,10 @@ public class Item {
 	private String name = "";
 	
 	@JsonIgnore
-	private ItemEntityStatus eventsStatus = new ItemEntityStatus();
+	private MapStatus eventsStatus = new MapStatus();
 	
 	@JsonIgnore
-	private ItemEntityStatus childStatus = new ItemEntityStatus();
+	private MapStatus childStatus = new MapStatus();
 
 	@JsonIgnore
 	private StringKeyValue[] allFiltersEqualFields;
