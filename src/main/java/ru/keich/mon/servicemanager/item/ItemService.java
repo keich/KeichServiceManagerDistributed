@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.concurrent.ForkJoinPool;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.hazelcast.collection.IQueue;
@@ -21,8 +22,10 @@ import com.hazelcast.query.Predicate;
 import com.hazelcast.query.Predicates;
 
 import lombok.Getter;
+import lombok.extern.java.Log;
 import ru.keich.mon.servicemanager.BaseStatus;
 import ru.keich.mon.servicemanager.QueueListner;
+import ru.keich.mon.servicemanager.QueueThreadReader;
 import ru.keich.mon.servicemanager.StringKeyValue;
 import ru.keich.mon.servicemanager.entity.EntityService;
 import ru.keich.mon.servicemanager.event.Event;
@@ -45,6 +48,7 @@ import ru.keich.mon.servicemanager.event.EventService;
  */
 
 @Service
+//@Log
 public class ItemService extends EntityService<String, Item> {
 	
 	public static final String NAME_ITEMS_MAP = "items";
@@ -52,25 +56,35 @@ public class ItemService extends EntityService<String, Item> {
 	public static final String INDEX_FIELD_ALLEQUALFILTERS = "allFiltersEqualFields[any]";
 	public static final String INDEX_FIELD_CHILDREN = "childrenIds[any]";
 	public static final String INDEX_FIELD_ITEMTOEVENT = "events[keys]";
+	public static final String INDEX_FIELD_CHILDRENSTATUS = "children[keys]";
 	
 	public static final String QUEUE_ITEM_CHANGE_NAME = "queueItemChange";
 
 	
-	protected final IQueue<String> queueEventChange;
-	protected final IQueue<String> queueEventRemoved;
-	protected final IQueue<String> queueItemChange;
+	protected final QueueThreadReader<String> queueEventChange;
+	protected final QueueThreadReader<String> queueEventRemoved;
+	protected final QueueThreadReader<ParentChild> queueItemChange;
+
 	private final EventService eventService;
 	ForkJoinPool forkJoinPool = ForkJoinPool.commonPool();
 	
-	public ItemService(HazelcastInstance hazelcastInstance, EventService eventService) {
+	public ItemService(HazelcastInstance hazelcastInstance,
+			EventService eventService,
+			@Value("${ru.keich.mon.servicemanager.item:2}") Integer queueThredNumber) {
 		super(NAME_ITEMS_MAP, hazelcastInstance);
 		this.eventService = eventService;
-		queueEventChange = hazelcastInstance.getQueue(EventService.QUEUE_EVENT_CHANGE_NAME);
-		queueEventChange.addItemListener(new QueueListner<String>(this::eventChanged), true);
-		queueEventRemoved = hazelcastInstance.getQueue(EventService.QUEUE_EVENT_REMOVED_NAME);
-		queueEventRemoved.addItemListener(new QueueListner<String>(this::eventRemoved), true);
-		queueItemChange = hazelcastInstance.getQueue(QUEUE_ITEM_CHANGE_NAME);
-		queueItemChange.addItemListener(new QueueListner<String>(this::itemChanged), true);
+		queueEventChange = new QueueThreadReader<String>(hazelcastInstance,
+				EventService.QUEUE_EVENT_CHANGE_NAME,
+				queueThredNumber,
+				this::eventChanged);
+		queueEventRemoved = new QueueThreadReader<String>(hazelcastInstance,
+				EventService.QUEUE_EVENT_REMOVED_NAME,
+				queueThredNumber,
+				this::eventRemoved);
+		queueItemChange = new QueueThreadReader<ParentChild>(hazelcastInstance,
+				QUEUE_ITEM_CHANGE_NAME,
+				queueThredNumber,
+				this::childChanged);
 	}
 
 	@Override
@@ -80,14 +94,17 @@ public class ItemService extends EntityService<String, Item> {
 			item.setStatus(old.getStatus());
 			item.setCreatedOn(old.getCreatedOn());
 			item.setEventsStatus(old.getEventsStatus());
+			item.setChildStatus(old.getChildStatus());
 			return item;
 		});
-		queueItemChange.add(item.getId());
+		queueItemChange.add(new ParentChild(item.getId(), ""));
 	}
 
 	@Override
 	protected Item entityRemoved(Item item) {
-		findParentIdsById(item.getId()).forEach(queueItemChange::add);
+		findParentIdsById(item.getId()).stream()
+				.map(parentId -> new ParentChild(parentId, ""))
+				.forEach(queueItemChange::add);
 		return item;
 	}
 
@@ -183,45 +200,59 @@ public class ItemService extends EntityService<String, Item> {
 			item.getEventsStatus().put(event.getId(), status);
 			return Optional.of(item);
 		});
-		queueItemChange.add(itemId);
+		queueItemChange.add(new ParentChild(itemId, ""));
 	}
 	
 	private void removeEventFromItem(String itemId, String eventId) {
 		lock(itemId, item -> {
 			return Optional.of(item.getEventsStatus().remove(eventId)).map(b -> item);
-		}, queueItemChange::add);
+		}, id -> queueItemChange.add(new ParentChild(id, "")));
 	}
 	
 	
-	private void eventChanged(ItemEvent<String> info) {
-		var opt = Optional.ofNullable(queueEventChange.poll()).map(eventService::findById);
-		while (opt.isPresent()) {
-			opt.map(this::findFiltersByEqualFields).orElse(Collections.emptyList()).forEach(this::addEventToItem);
-			opt = Optional.ofNullable(queueEventChange.poll()).map(eventService::findById);
+	private void eventChanged(String eventId) {
+		Optional.ofNullable(eventService.findById(eventId))
+				.ifPresent(event -> {
+					findFiltersByEqualFields(event).forEach(this::addEventToItem);
+				});
+	}
+	
+	private void eventRemoved(String eventId) {
+		findItemIdsByEventId(eventId).stream().forEach(itemId -> removeEventFromItem(itemId, eventId));
+	}
+	
+	@Getter
+	private static class ParentChild {
+		
+		String parentId;
+		String childId;
+		
+		public ParentChild(String parentId, String childId) {
+			super();
+			this.parentId = parentId;
+			this.childId = childId;
 		}
+		
 	}
-	
-	private void eventRemoved(ItemEvent<String> info) {
-		var opt = Optional.ofNullable(queueEventRemoved.poll());
-		while (opt.isPresent()) {
-			var eventId = opt.get();
-			findItemIdsByEventId(eventId).stream()
-					.forEach(itemId -> removeEventFromItem(itemId, eventId));
 
-			opt = Optional.ofNullable(queueEventRemoved.poll());
-		}
-	}
-
-	private void pushParentsForUpdate(String itemId) {
-		findParentIdsById(itemId).forEach(queueItemChange::add);
+	private void pushParentsForUpdate(String childId) {
+		findParentIdsById(childId).stream()
+				.map(parentId -> new ParentChild(parentId, childId))
+				.forEach(queueItemChange::add);
 	}
 	
-	private void itemChanged(ItemEvent<String> info) {
-		var opt = Optional.ofNullable(queueItemChange.poll());
-		while (opt.isPresent()) {
-			lock(opt.get(), this::calculateStatus, this::pushParentsForUpdate);
-			opt = Optional.ofNullable(queueItemChange.poll());
-		}
+	private void childChanged(ParentChild info) {
+		var parentId = info.getParentId();
+		var childId = info.getChildId();
+		lock(parentId, parent -> {
+			if (!"".equals(childId)) {
+				var child = findById(childId);
+				parent.getChildStatus().put(childId, child.getStatus());
+				calculateStatus(parent);
+				return Optional.of(parent);
+			}
+			return calculateStatus(parent);
+		}, this::pushParentsForUpdate);
 	}
 
 	private int calculateEntityStatusAsCluster(Item item, ItemRule rule) {
@@ -229,9 +260,9 @@ public class ItemService extends EntityService<String, Item> {
 		if (overal <= 0) {
 			return 0;
 		}
-		var listStatus = findByIds(item.getChildrenIds()).entrySet().stream()
+		var listStatus = item.getChildStatus().entrySet().stream()
 				.map(Map.Entry::getValue)
-				.mapToInt(child -> child.getStatus().ordinal())
+				.mapToInt(BaseStatus::ordinal)
 				.boxed()
 				.filter(i -> i >= rule.getStatusThreshold().ordinal())
 				.toList();
@@ -245,12 +276,9 @@ public class ItemService extends EntityService<String, Item> {
 		}
 		return 0;
 	}
-
+	
 	private int calculateEntityStatusDefault(Item item) {
-		return findByIds(item.getChildrenIds()).entrySet().stream()
-				.map(Map.Entry::getValue)
-				.mapToInt(child -> child.getStatus().ordinal())
-				.max().orElse(0);
+		return item.getChildStatus().getMaxStatus().ordinal();
 	}
 	
 	private int calculateStatusByChild(Item item) {
@@ -268,11 +296,7 @@ public class ItemService extends EntityService<String, Item> {
 	
 	private Optional<Item> calculateStatus(Item item) {
 		var maxStatus = BaseStatus.fromInteger(calculateStatusByChild(item));
-		var maxEventStatus = item.getEventsStatus().entrySet().stream()
-				.mapToInt(e -> e.getValue().ordinal())
-				.max()
-				.orElse(0);
-		final var eventStatusMax = BaseStatus.fromInteger(maxEventStatus);
+		var eventStatusMax = item.getEventsStatus().getMaxStatus();
 		maxStatus = maxStatus.max(eventStatusMax);
 		if (maxStatus != item.getStatus()) {
 			item.setStatus(maxStatus);

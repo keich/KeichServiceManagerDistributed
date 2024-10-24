@@ -69,7 +69,10 @@ public class Item {
 	private String name = "";
 	
 	@JsonIgnore
-	private ItemEventsStatus eventsStatus = new ItemEventsStatus();
+	private ItemEntityStatus eventsStatus = new ItemEntityStatus();
+	
+	@JsonIgnore
+	private ItemEntityStatus childStatus = new ItemEntityStatus();
 
 	@JsonIgnore
 	private StringKeyValue[] allFiltersEqualFields;
